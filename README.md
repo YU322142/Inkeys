@@ -1,3 +1,8 @@
+> **非官方修复 fork（YU322142）**：此分支基于 Inkeys 20261109a Canary，修复 PPT 关闭后进程残留的一条 COM 清理路径。原项目与作者见 [Alan-CRL/Inkeys](https://github.com/Alan-CRL/Inkeys)。
+>
+> 修复范围、实测结果及未签名二进制说明见 [PPT-CLOSE-FIX.md](PPT-CLOSE-FIX.md)；个人修复版请查看本 fork 的 [Releases](https://github.com/YU322142/Inkeys/releases)。
+
+---
 <div align="center">
 
 **Copyright © 2023-2025 AlanCRL（陈润林）工作室**  

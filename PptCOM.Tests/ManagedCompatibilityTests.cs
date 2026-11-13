@@ -380,6 +380,73 @@ namespace PptCOM.Tests
             }
         }
 
+        private static void TestBusyLastDocumentClose()
+        {
+            foreach (int code in new[] { unchecked((int)0x8001010A),
+                unchecked((int)0x800AC472), unchecked((int)0x80010001) })
+            {
+                using (var h = new ServerHarness())
+                {
+                    var documents = new FakeNode("closeDocuments");
+                    documents.Properties["Count"] = 0;
+                    h.Graph.Application.Properties["Presentations"] = documents;
+                    h.Accessor.FailureStage = "application.ActivePresentation";
+                    h.Accessor.Failure = new COMException("busy during last close", code);
+                    Check(!h.Observe() && h.State.Capture().Lifecycle == "Inactive" &&
+                        h.Outstanding("closeDocuments") == 0,
+                        "confirmed no documents overrides ActivePresentation busy 0x" + code.ToString("X8"));
+                }
+                using (var h = new ServerHarness())
+                {
+                    var documents = new FakeNode("openDocuments");
+                    documents.Properties["Count"] = 1;
+                    h.Graph.Application.Properties["Presentations"] = documents;
+                    h.Accessor.FailureStage = "application.ActivePresentation";
+                    h.Accessor.Failure = new COMException("busy with live document", code);
+                    h.Call("DispatchBoundEvent", 1L, 2025);
+                    Check(h.Observe() && h.State.Capture().Lifecycle == "Unknown" &&
+                        h.Outstanding("application") == 1 && h.Outstanding("presentation") == 1 &&
+                        h.Outstanding("openDocuments") == 0,
+                        "before-close hint plus busy cannot discard an open or cancelled-close document");
+                    documents.Properties["Count"] = 0;
+                    h.Accessor.BeforeAccess = stage => {
+                        if (stage == "openDocuments.Count")
+                            throw new COMException("document count busy too", code);
+                    };
+                    Check(h.Observe() && h.State.Capture().Lifecycle == "Unknown" &&
+                        h.Outstanding("application") == 1 && h.Outstanding("openDocuments") == 0,
+                        "unreadable document count is not converted to zero and temporary collection releases");
+                    h.Accessor.BeforeAccess = null;
+                    h.Accessor.FailureStage = null;
+                    documents.Properties["Count"] = 1;
+                    Check(h.Observe() && h.State.Capture().Lifecycle == "Active" && h.Current == 2,
+                        "busy binding resumes existing show after a cancelled or deferred close");
+                }
+            }
+            using (var h = new ServerHarness())
+            {
+                var documents = new FakeNode("serviceCloseDocuments");
+                documents.Properties["Count"] = 0;
+                h.Graph.Application.Properties["Presentations"] = documents;
+                h.Accessor.FailureStage = "application.ActivePresentation";
+                h.Accessor.Failure = new COMException("busy", unchecked((int)0x8001010A));
+                int unadvises = 0, pointReleases = 0, result = -99;
+                h.Set("eventConnection", new ComEventConnection(73, cookie => {
+                    Check(cookie == 73, "automatic close cleanup keeps original event cookie");
+                    ++unadvises; return 0;
+                }, () => ++pointReleases, delegate { }));
+                var owner = new Thread(() => { result = h.Server.PptComService(); });
+                owner.IsBackground = true;
+                owner.Start();
+                bool closedWithoutStop = owner.Join(1500);
+                if (!closedWithoutStop) { h.Stop(); owner.Join(3000); }
+                Check(closedWithoutStop && result == 0 && h.Outstanding("application") == 0 &&
+                    h.Outstanding("presentation") == 0 && h.Outstanding("window") == 0 &&
+                    unadvises == 1 && pointReleases == 1 && ComEventRetirementRegistry.PendingCount == 0,
+                    "last-document evidence ends owner service and drains roots/events without Inkeys stop or GC");
+            }
+        }
+
         private static void TestWindowEvidence()
         {
             var show = new SlideShowWindowEvidence { Handle = new IntPtr(100), ProcessId = 10,
@@ -1758,6 +1825,7 @@ namespace PptCOM.Tests
             TestEventCleanupOwnership();
             TestCleanupSurvivesDiagnosticFailure();
             TestDisconnectedAndLastDocumentClose();
+            TestBusyLastDocumentClose();
             TestWindowEvidence();
             TestDiagnosticPreservesErrorInfo();
             TestNavigationPerfDiagnostics();

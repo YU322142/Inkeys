@@ -1314,9 +1314,10 @@ namespace PptCOM
                 }
                 catch (Exception error)
                 {
-                    uint code;
-                    if (IsDisconnectedComObject(error) || TryGetBusyComErrorCode(error, out code)) throw;
-                    // 关闭最后文稿时 ActivePresentation 可先失效；独立文稿 Count=0 才确认关闭。
+                    if (IsDisconnectedComObject(error)) throw;
+                    // 最后文稿关闭期间 ActivePresentation 也可能暂时报 busy。
+                    // 先用独立的文稿 Count=0 确认关闭，不能让 busy 永久保留应用/文稿/事件连接。
+                    // Count 非零或不可读时仍重抛原错误，由既有 Unknown/busy 路径保留可恢复绑定。
                     try
                     {
                         using (PptPerfTrace.Begin("observe-presentations-count"))

@@ -57,6 +57,7 @@ JSON schema version 1 恰含 `schemaVersion/provider/status/fullName/presentatio
 - 文稿 `FullName/Name` 不能随稳定拓扑永久缓存：相同 COM identity 可被另存或首次保存；fast 复用前必须由 owner dynamic 重新确认身份。跨放映 session 首次重新完整验证，身份 busy/失败不能把旧路径发布为可信新身份；不以单独增加 binding revision 绕过正常事件绑定生命周期。
 - 当前页的 `SlideIndex` 和 `SlideID` 必须来自同一个 `View.Slide` acquisition。完整 topology 必须用 `for (1..Count) + Slides.Item(i)` 读取，校验当前 SlideIndex 顺序、正 SlideID、唯一性及当前 ID 对应；descriptor 中的数组顺序只表示本次 COM 的当前页顺序，不能把顺序变化当成 SlideID 身份变化。任一读取失败不得返回部分 `slideIds`。
 - `FullCleanup` 由 owner 在旧 binding 请求失效且在途使用结束后执行：先推进 `bindingRevision`/纯值状态，再逐项解绑事件并按 window -> presentation -> application 释放持有。不得靠 `GC.Collect/WaitForPendingFinalizers`、循环Release或共享RCW的FinalRelease补漏；每笔取得必须已配平。取消某一事件失败不能阻断其他订阅清理。
+- 关闭最后文稿时 `ActivePresentation` 可以先报 busy；不能因此跳过独立 `Presentations.Count` 的关闭确认。成功读到 Count=0 才结束当前绑定并由 owner finally 清理；Count 非零、缺失或 busy 仍走原始错误的 Unknown/retry 路径。回归需覆盖三个 busy HRESULT、取消关闭后的恢复和不设置 offSignal 的服务自行清理；此合同不等于特定 Office 版本已通过实机退出验收。
 - managed 在缓存/数组分配前限制单个 identity 的 UTF-8 长度不超过 32 KiB、页数不超过 10,000；native 再对 JSON 设置 1 MiB UTF-8 payload、32 KiB identity 和 10,000 页上限，并严格校验 schema/status/数值/唯一 SlideID。
 - 有效 shared 页已变而 descriptor 仍是上一页，或 descriptor 为 `TransientBusy` 时，只有 descriptor bindingRevision 与 Bridge 当前 target 相同才可暂存旧画布且不发 ready；新 binding 首次 busy/unavailable 必须隔离，不能把 A 画布留给 B。
 
